@@ -1,0 +1,100 @@
+- name: Group Policy - Import
+  hosts: domain_controllers
+  vars:
+    backupBasePath: 'C:\Windows\Temp\GPOBackup'
+  vars_prompt:
+    - name: targetDomain
+      prompt: What is the target domain?
+      private: false
+    - name: gpoName
+      prompt: What is the name of the GPO to import?
+      private: false
+    - name: backupDate
+      prompt: What is the backup date to restore from? (yyyy-MM-dd)
+      private: false
+    - name: backupId
+      prompt: What is the backup ID (GUID) to restore?
+      private: false
+
+  tasks:
+    - name: Ensure Domain Controllers are available
+      ansible.windows.win_ping:
+
+    - name: Ensure GPMC is available
+      ansible.windows.win_feature:
+        name: GPMC
+        state: present
+
+    - name: Show input vars
+      ansible.builtin.debug:
+        msg: "GPO: {{ gpoName }} | Domain: {{ sourceDomain }} | Backup Date: {{ backupDate }} | Backup ID: {{ backupId }}"
+
+    - name: Check if GPO already exists
+      ansible.windows.win_powershell:
+        script: |
+          $allGpos = Get-GPO -All -Domain '{{ sourceDomain }}'
+          $match = $allGpos | Where-Object { $_.DisplayName -eq '{{ gpoName }}' }
+          if ($match) {
+              Write-Output ([PSCustomObject]@{
+                  Exists           = $true
+                  DisplayName      = $match.DisplayName
+                  DomainName       = $match.DomainName
+                  Owner            = $match.Owner
+                  Id               = $match.Id
+                  GpoStatus        = $match.GpoStatus
+                  CreationTime     = $match.CreationTime
+                  ModificationTime = $match.ModificationTime
+              })
+          } else {
+              Write-Output ([PSCustomObject]@{
+                  Exists      = $false
+                  DisplayName = '{{ gpoName }}'
+              })
+          }
+      register: gpoCheck
+
+    - name: Show GPO check result
+      ansible.builtin.debug:
+        var: gpoCheck.output[0]
+
+    - name: Confirm overwrite if GPO exists
+      ansible.builtin.pause:
+        prompt: "GPO '{{ gpoName }}' already exists in domain '{{ sourceDomain }}'. Do you want to overwrite it? (yes/no)"
+      register: overwriteConfirm
+      when: gpoCheck.output[0].Exists | bool
+
+    - name: Exit if overwrite not confirmed
+      ansible.builtin.fail:
+        msg: "Import aborted. GPO '{{ gpoName }}' already exists and overwrite was not confirmed."
+      when: gpoCheck.output[0].Exists | bool and overwriteConfirm.user_input | lower != 'yes'
+
+    - name: Import GPO
+      ansible.windows.win_powershell:
+        script: |
+          $backupFolder = '{{ backupBasePath }}' + '\{{ backupDate }}'
+          $targetName = '{{ gpoCheck.output[0].DisplayName }}'
+          try {
+              if ('{{ gpoCheck.output[0].Exists }}' -eq 'True') {
+                  Import-GPO -BackupId '{{ backupId }}' -TargetName $targetName -Domain '{{ sourceDomain }}' -Path $backupFolder -ErrorAction Stop
+              } else {
+                  New-GPO -Name $targetName -Domain '{{ sourceDomain }}' -ErrorAction Stop | Out-Null
+                  Import-GPO -BackupId '{{ backupId }}' -TargetName $targetName -Domain '{{ sourceDomain }}' -Path $backupFolder -ErrorAction Stop
+              }
+              Write-Output ([PSCustomObject]@{
+                  ImportSuccess = $true
+                  DisplayName   = $targetName
+                  BackupId      = '{{ backupId }}'
+              })
+          }
+          catch {
+              Write-Output ([PSCustomObject]@{
+                  ImportSuccess = $false
+                  ImportError   = $_.Exception.Message
+              })
+          }
+      register: importResult
+      when: gpoCheck.output[0].Exists | bool == false or overwriteConfirm.user_input | lower == 'yes'
+
+    - name: Show import result
+      ansible.builtin.debug:
+        var: importResult.output[0]
