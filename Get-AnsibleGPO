@@ -1,0 +1,16 @@
+function Get-AnsibleGPO {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$GPOName,
+        [Parameter(Mandatory)]
+        [string]$Domain
+    )
+
+    try {
+        return Get-GPO -Name $GPOName -Domain $Domain -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+}
