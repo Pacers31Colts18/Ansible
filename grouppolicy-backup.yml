@@ -1,0 +1,131 @@
+- name: Group Policy - Backup
+  hosts: domain_controllers
+  vars_prompt:
+    - name: sourceDomain
+      prompt: What is the source domain?
+      private: false
+    - name: gpoName
+      prompt: What is the name of the GPO?
+      private: false
+  tasks:
+    - name: Ensure Domain Controllers are available
+      ansible.windows.win_ping:
+
+    - name: Ensure GPMC is available
+      ansible.windows.win_feature:
+        name: GPMC
+        state: present
+
+    - name: Show input vars
+      ansible.builtin.debug:
+        msg: "GPO: {{ gpoName }} | Domain: {{ sourceDomain }}"
+
+    - name: Get all GPOs and check for match
+      ansible.windows.win_powershell:
+        script: |
+          $allGpos = Get-GPO -All -Domain '{{ sourceDomain }}'
+          $match = $allGpos | Where-Object { $_.DisplayName -eq '{{ gpoName }}' }
+          if ($match) {
+              if (-not (Test-Path 'C:\Windows\Temp\GPOBackup')) {
+                  New-Item -ItemType Directory -Path 'C:\Windows\Temp\GPOBackup' | Out-Null
+              }
+              try {
+                  $backup = Backup-GPO -Name $match.DisplayName -Domain '{{ sourceDomain }}' -Path 'C:\Windows\Temp\GPOBackup' -ErrorAction Stop
+                  Write-Output ([PSCustomObject]@{
+                      DisplayName      = $match.DisplayName
+                      DomainName       = $match.DomainName
+                      Owner            = $match.Owner
+                      Id               = $match.Id
+                      GpoStatus        = $match.GpoStatus
+                      CreationTime     = $match.CreationTime
+                      ModificationTime = $match.ModificationTime
+                      BackupId         = $backup.Id
+                      BackupSuccess    = $true
+                  })
+              }
+              catch {
+                  Write-Output ([PSCustomObject]@{
+                      DisplayName   = $match.DisplayName
+                      BackupSuccess = $false
+                      BackupError   = $_.Exception.Message
+                  })
+              }
+          } else {
+              Write-Output "No match found for '{{ gpoName }}'. Available GPOs:"
+              $allGpos | ForEach-Object { Write-Output $_.DisplayName }
+          }
+      register: gpoCheck
+
+    - name: Show GPO check result
+      ansible.builtin.debug:
+        var: gpoCheck.output[0]
+
+    - name: Zip GPO backup on remote host
+      ansible.windows.win_powershell:
+        script: |
+          $backupId = '{{ gpoCheck.output[0].BackupId }}'.Trim().ToUpper()
+          $source = "C:\Windows\Temp\GPOBackup\{$backupId}"
+          $dest = "C:\Windows\Temp\GPOBackup\$backupId.zip"
+          Write-Output "Source path: $source"
+          Write-Output "Path exists: $(Test-Path $source)"
+          Compress-Archive -Path $source -DestinationPath $dest -Force
+      register: zipResult
+      when: gpoCheck.output[0].BackupSuccess | bool
+
+    - name: Show zip result
+      ansible.builtin.debug:
+        var: zipResult.output
+
+    - name: Create gpo_backups directory on Ansible server
+      ansible.builtin.file:
+        path: "./gpo_backups"
+        state: directory
+      delegate_to: localhost
+      when: gpoCheck.output[0].BackupSuccess | bool
+
+    - name: Fetch GPO backup to Ansible server
+      ansible.builtin.fetch:
+        src: "C:\\Windows\\Temp\\GPOBackup\\{{ gpoCheck.output[0].BackupId | upper }}.zip"
+        dest: "./gpo_backups/{{ gpoName }}.zip"
+        flat: true
+      when: gpoCheck.output[0].BackupSuccess | bool
+
+    - name: Check if zip exists on Ansible server
+      ansible.builtin.stat:
+        path: "./gpo_backups/{{ gpoName }}.zip"
+      delegate_to: localhost
+      register: zipStat
+      when: gpoCheck.output[0].BackupSuccess | bool
+
+    - name: Show zip stat
+      ansible.builtin.debug:
+        var: zipStat.stat.exists
+      delegate_to: localhost
+      when: gpoCheck.output[0].BackupSuccess | bool
+
+    - name: Create GPO specific backup directory on Ansible server
+      ansible.builtin.file:
+        path: "./gpo_backups/{{ gpoName }}"
+        state: directory
+      delegate_to: localhost
+      when: zipStat.stat.exists | bool
+
+    - name: Unzip GPO backup on Ansible server
+      ansible.builtin.command:
+        cmd: "unzip -o -W './gpo_backups/{{ gpoName }}.zip' -d './gpo_backups/{{ gpoName }}/'"
+      delegate_to: localhost
+      when: zipStat.stat.exists | bool
+      failed_when: false
+
+    - name: Clean up zip on Ansible server
+      ansible.builtin.file:
+        path: "./gpo_backups/{{ gpoName }}.zip"
+        state: absent
+      delegate_to: localhost
+      when: zipStat.stat.exists | bool
+
+    - name: Clean up temp backup on remote host
+      ansible.windows.win_file:
+        path: "C:\\Windows\\Temp\\GPOBackup"
+        state: absent
+      when: gpoCheck.output[0].BackupSuccess | bool
