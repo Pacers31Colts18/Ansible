@@ -1,0 +1,5 @@
+*.retry
+gpo_backups/
+*.log
+group_vars/windows.yml
+group_vars/windows.yml
