@@ -1,10 +1,18 @@
 - name: Group Policy - Import
   hosts: domain_controllers
+  vars_files:
+    - vars/ous.yml
+    - vars/domains.yml
   vars:
     backupBasePath: 'C:\Windows\Temp\GPOBackup'
   vars_prompt:
-    - name: targetDomain
-      prompt: What is the target domain?
+    - name: domainSelection
+      prompt: |
+        Select target domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
       private: false
     - name: gpoName
       prompt: What is the name of the GPO to import?
@@ -17,6 +25,10 @@
       private: false
 
   tasks:
+    - name: Set target domain from selection
+      ansible.builtin.set_fact:
+        targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+
     - name: Ensure Domain Controllers are available
       ansible.windows.win_ping:
 
@@ -27,13 +39,16 @@
 
     - name: Show input vars
       ansible.builtin.debug:
-        msg: "GPO: {{ gpoName }} | Domain: {{ sourceDomain }} | Backup Date: {{ backupDate }} | Backup ID: {{ backupId }}"
+        msg: "GPO: {{ gpoName }} | Domain: {{ targetDomain }} | Backup Date: {{ backupDate }} | Backup ID: {{ backupId }}"
 
     - name: Check if GPO already exists
       ansible.windows.win_powershell:
         script: |
-          $allGpos = Get-GPO -All -Domain '{{ sourceDomain }}'
-          $match = $allGpos | Where-Object { $_.DisplayName -eq '{{ gpoName }}' }
+          $targetDomain = '{{ targetDomain }}'
+          $gpoName = '{{ gpoName }}'
+
+          $allGpos = Get-GPO -All -Domain $targetDomain
+          $match = $allGpos | Where-Object { $_.DisplayName -eq $gpoName }
           if ($match) {
               Write-Output ([PSCustomObject]@{
                   Exists           = $true
@@ -48,53 +63,73 @@
           } else {
               Write-Output ([PSCustomObject]@{
                   Exists      = $false
-                  DisplayName = '{{ gpoName }}'
+                  DisplayName = $gpoName
               })
           }
       register: gpoCheck
 
     - name: Show GPO check result
       ansible.builtin.debug:
-        var: gpoCheck.output[0]
+        var: gpoCheck.output | selectattr('Exists', 'defined') | list | last
 
     - name: Confirm overwrite if GPO exists
       ansible.builtin.pause:
-        prompt: "GPO '{{ gpoName }}' already exists in domain '{{ sourceDomain }}'. Do you want to overwrite it? (yes/no)"
+        prompt: "GPO '{{ gpoName }}' already exists in domain '{{ targetDomain }}'. Do you want to overwrite it? (yes/no)"
       register: overwriteConfirm
-      when: gpoCheck.output[0].Exists | bool
+      when: gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
 
     - name: Exit if overwrite not confirmed
       ansible.builtin.fail:
         msg: "Import aborted. GPO '{{ gpoName }}' already exists and overwrite was not confirmed."
-      when: gpoCheck.output[0].Exists | bool and overwriteConfirm.user_input | lower != 'yes'
+      when:
+        - gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+        - overwriteConfirm.user_input | lower != 'yes'
 
     - name: Import GPO
       ansible.windows.win_powershell:
         script: |
+          $targetDomain = '{{ targetDomain }}'
+          $gpoName = '{{ gpoName }}'
           $backupFolder = '{{ backupBasePath }}' + '\{{ backupDate }}'
-          $targetName = '{{ gpoCheck.output[0].DisplayName }}'
+          $gpoExists = '{{ gpoCheck.output | selectattr("Exists", "defined") | map(attribute="Exists") | list | last }}'
+
           try {
-              if ('{{ gpoCheck.output[0].Exists }}' -eq 'True') {
-                  Import-GPO -BackupId '{{ backupId }}' -TargetName $targetName -Domain '{{ sourceDomain }}' -Path $backupFolder -ErrorAction Stop
+              if ($gpoExists -eq 'True') {
+                  Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
               } else {
-                  New-GPO -Name $targetName -Domain '{{ sourceDomain }}' -ErrorAction Stop | Out-Null
-                  Import-GPO -BackupId '{{ backupId }}' -TargetName $targetName -Domain '{{ sourceDomain }}' -Path $backupFolder -ErrorAction Stop
+                  New-GPO -Name $gpoName -Domain $targetDomain -ErrorAction Stop | Out-Null
+                  Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
               }
               Write-Output ([PSCustomObject]@{
                   ImportSuccess = $true
-                  DisplayName   = $targetName
+                  DisplayName   = $gpoName
                   BackupId      = '{{ backupId }}'
+                  Domain        = $targetDomain
               })
           }
           catch {
               Write-Output ([PSCustomObject]@{
                   ImportSuccess = $false
+                  DisplayName   = $gpoName
+                  Domain        = $targetDomain
                   ImportError   = $_.Exception.Message
               })
           }
       register: importResult
-      when: gpoCheck.output[0].Exists | bool == false or overwriteConfirm.user_input | lower == 'yes'
+      when: >
+        not (gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool)
+        or overwriteConfirm.user_input | lower == 'yes'
 
-    - name: Show import result
+    - name: Import succeeded
       ansible.builtin.debug:
-        var: importResult.output[0]
+        msg: "Successfully imported '{{ gpoName }}' into '{{ targetDomain }}' from backup '{{ backupId }}'"
+      when:
+        - importResult is not skipped
+        - importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool
+
+    - name: Import failed
+      ansible.builtin.fail:
+        msg: "Failed to import '{{ gpoName }}' into '{{ targetDomain }}' - Error: {{ (importResult.output | selectattr('ImportError', 'defined') | list | last).ImportError }}"
+      when:
+        - importResult is not skipped
+        - not (importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool)

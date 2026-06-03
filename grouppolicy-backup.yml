@@ -1,12 +1,24 @@
 - name: Group Policy - Backup
   hosts: domain_controllers
+  vars_files:
+    - vars/domains.yml
   vars:
     backupPath: 'C:\Windows\Temp\GPOBackup'
   vars_prompt:
-    - name: sourceDomain
-      prompt: What is the source domain?
+    - name: domainSelection
+      prompt: |
+        Select source domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
       private: false
+
   tasks:
+    - name: Set source domain from selection
+      ansible.builtin.set_fact:
+        sourceDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+
     - name: Ensure Domain Controllers are available
       ansible.windows.win_ping:
 
@@ -22,16 +34,20 @@
     - name: Backup all GPOs
       ansible.windows.win_powershell:
         script: |
+          $sourceDomain = '{{ sourceDomain }}'
           $date = Get-Date -Format 'yyyy-MM-dd'
           $fullPath = '{{ backupPath }}' + '\' + $date
+
           if (-not (Test-Path $fullPath)) {
               New-Item -ItemType Directory -Path $fullPath | Out-Null
           }
-          $allGpos = Get-GPO -All -Domain '{{ sourceDomain }}'
+
+          $allGpos = Get-GPO -All -Domain $sourceDomain
           $results = @()
+
           foreach ($gpo in $allGpos) {
               try {
-                  $backup = Backup-GPO -Name $gpo.DisplayName -Domain '{{ sourceDomain }}' -Path $fullPath -ErrorAction Stop
+                  $backup = Backup-GPO -Name $gpo.DisplayName -Domain $sourceDomain -Path $fullPath -ErrorAction Stop
                   $results += [PSCustomObject]@{
                       DisplayName   = $gpo.DisplayName
                       BackupId      = $backup.Id
@@ -47,11 +63,27 @@
                   }
               }
           }
+
           foreach ($result in $results) {
               Write-Output $result
           }
       register: backupResults
 
-    - name: Show backup results
+    - name: Show successful backups
       ansible.builtin.debug:
-        var: backupResults.output
+        msg: "Backed up '{{ item.DisplayName }}' | ID: {{ item.BackupId }} | Path: {{ item.BackupPath }}"
+      loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', true) | list }}"
+      loop_control:
+        label: "{{ item.DisplayName }}"
+
+    - name: Show failed backups
+      ansible.builtin.debug:
+        msg: "Failed to back up '{{ item.DisplayName }}' - Error: {{ item.BackupError }}"
+      loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list }}"
+      loop_control:
+        label: "{{ item.DisplayName }}"
+
+    - name: Fail if any backups failed
+      ansible.builtin.fail:
+        msg: "One or more GPO backups failed. Review the output above."
+      when: backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list | length > 0
