@@ -1,42 +1,11 @@
-- name: Group Policy - Backup
-  hosts: domain_controllers
-  vars_files:
-    - vars/domains.yml
-  vars:
-    backupPath: 'C:\Windows\Temp\GPOBackup'
-  vars_prompt:
-    - name: domainSelection
-      prompt: |
-        Select source domain:
-        {% for domain in domains %}
-        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
-        {% endfor %}
-        Enter number
-      private: false
-
-  tasks:
-    - name: Set source domain from selection
-      ansible.builtin.set_fact:
-        sourceDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
-
-    - name: Ensure Domain Controllers are available
-      ansible.windows.win_ping:
-
-    - name: Ensure GPMC is available
-      ansible.windows.win_feature:
-        name: GPMC
-        state: present
-
-    - name: Show input vars
-      ansible.builtin.debug:
-        msg: "Domain: {{ sourceDomain }}"
 
     - name: Backup all GPOs
       ansible.windows.win_powershell:
         script: |
           $sourceDomain = '{{ sourceDomain }}'
-          $date = Get-Date -Format 'yyyy-MM-dd'
-          $fullPath = '{{ backupPath }}' + '\' + $date
+          $backupPath = '{{ backupPath }}'
+          $date = Get-Date -Format "yyyy-MM-dd-HHmm"
+          $fullPath = $backupPath + '\' + $date
 
           if (-not (Test-Path $fullPath)) {
               New-Item -ItemType Directory -Path $fullPath | Out-Null

@@ -1,0 +1,25 @@
+- name: Group Policy - Backup
+  hosts: domain_controllers
+  vars_files:
+    - vars/var-gpo.yml
+  vars_prompt:
+    - name: domainSelection
+      prompt: |
+        Select source domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
+      private: false
+
+  tasks:
+    - name: Set source domain from selection
+      ansible.builtin.set_fact:
+        sourceDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+        backupPath: "{{ domains[domainSelection | int - 1].backupPath }}"
+
+    - name: Check GPO prerequisites
+      ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
+
+    - name: Backup all GPOs
+      ansible.builtin.include_tasks: tasks/task-backup-gpo-all.yml

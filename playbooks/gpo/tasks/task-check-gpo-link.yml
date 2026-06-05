@@ -1,0 +1,48 @@
+- name: Check if GPO is linked to OU
+  ansible.windows.win_powershell:
+    script: |
+      {{ lookup('file', 'files/ConvertTo-DistinguishedName.ps1') }}
+
+      $targetDomain = '{{ targetDomain }}'
+      $gpoName = '{{ gpoName }}'
+      $targetOU = '{{ item.dn }}'
+
+      $AllGPOs = Get-GPO -All -Domain $targetDomain | Where-Object { $_.DisplayName -eq $gpoName }
+      $linkedToTarget = $false
+      $GPOLinksArray = @()
+
+      foreach ($g in $AllGPOs) {
+          [xml]$GpoReport = Get-GPOReport -ReportType Xml -Guid $g.Id -Domain $targetDomain
+          foreach ($i in $GpoReport.GPO.LinksTo) {
+              $ouDN = ConvertTo-DistinguishedName -CanonicalName $i.SOMPath
+              $linkEnabled = if ($i.Enabled -eq $true) { "Yes" } else { "No" }
+              $GPOLinksArray += [PSCustomObject]@{
+                  DomainName  = $targetDomain
+                  PolicyName  = $GpoReport.GPO.Name
+                  OUPath      = $ouDN
+                  LinkEnabled = $linkEnabled
+              }
+              if ($ouDN -ieq $targetOU) {
+                  $linkedToTarget = $true
+              }
+          }
+      }
+
+      Write-Output ([PSCustomObject]@{
+          OUName         = '{{ item.name }}'
+          TargetOU       = $targetOU
+          LinkedToTarget = $linkedToTarget
+          ExistingLinks  = $GPOLinksArray
+      })
+  register: gpoLinkCheck
+  changed_when: false
+
+- name: GPO linked
+  ansible.builtin.debug:
+    msg: "GPO '{{ gpoName }}' is linked to '{{ item.name }}'."
+  when: gpoLinkCheck.output | selectattr('LinkedToTarget', 'defined') | map(attribute='LinkedToTarget') | list | last | bool
+
+- name: GPO not linked
+  ansible.builtin.debug:
+    msg: "GPO '{{ gpoName }}' is NOT linked to '{{ item.name }}'."
+  when: not (gpoLinkCheck.output | selectattr('LinkedToTarget', 'defined') | map(attribute='LinkedToTarget') | list | last | bool)

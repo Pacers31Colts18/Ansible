@@ -1,0 +1,37 @@
+- name: Link GPO to OU
+  ansible.windows.win_powershell:
+    script: |
+      $targetDomain = '{{ targetDomain }}'
+      $gpoName = '{{ gpoName }}'
+      $targetOU = '{{ item.dn }}'
+      $ouName = '{{ item.name }}'
+
+      Try {
+          New-GPLink -Name $gpoName -Target $targetOU -Domain $targetDomain -ErrorAction Stop
+          Write-Output ([PSCustomObject]@{
+              OUName   = $ouName
+              TargetOU = $targetOU
+              Success  = $true
+              Action   = "Linked"
+          })
+      }
+      Catch {
+          Write-Output ([PSCustomObject]@{
+              OUName       = $ouName
+              TargetOU     = $targetOU
+              Success      = $false
+              Action       = "Failed"
+              ErrorMessage = $_.Exception.Message
+          })
+      }
+  register: gpoLinkResult
+
+- name: GPO link successful
+  ansible.builtin.debug:
+    msg: "Successfully linked '{{ gpoName }}' to '{{ item.name }}' ({{ item.dn }})"
+  when: gpoLinkResult.output | selectattr('Success', 'defined') | map(attribute='Success') | list | last | bool
+
+- name: GPO link failed
+  ansible.builtin.fail:
+    msg: "Failed to link '{{ gpoName }}' to '{{ item.name }}' ({{ item.dn }}) - Error: {{ (gpoLinkResult.output | selectattr('ErrorMessage', 'defined') | list | last).ErrorMessage }}"
+  when: not (gpoLinkResult.output | selectattr('Success', 'defined') | map(attribute='Success') | list | last | bool)
