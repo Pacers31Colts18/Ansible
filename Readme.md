@@ -20,36 +20,90 @@ Default config file. Does the following:
 2. Loads the password vault from my home directory (not in this repo), which contains the key to decrypt the windows.yml file.
 3. Disables SSH host key verification.
 
-### group_vars\windows.yml
+## playbooks\gpo
 
-Contains the credentials used to connect to my hosts. Since this is a lab and not production, this is a Domain Administrator account containing my username and password.
+### playbook-gpo-backup-all.yml
 
-### vars\domains.yml
+Prompted for a domain (from the **var-gpo.yml** file), will then backup all GPOs in the domain to the specified path (also from the **var-gpo.yml** file). 
 
-Contains a list of domains that you can manage. I only have one, but if you had multiple, you'd put it in here. Then with the playbooks you would choose which domain to manage.
+Uses the following tasks:
 
-### vars\ous.yml
+- task-check-gpo-prerequisites.yml
+- task-backup-gpo-all.yml
 
-Contains a list of organizational units that you can manage. In this case, the playbooks process all the OUs in the file.
+### playbook-gpo-check.yml
 
-## Playbooks
+Prompted for a domain (from the **var-gpo.yml** file), and then prompts for a GPO name. From there it will check to see if the GPO exists or not in a domain.
 
-### grouppolicy-backup.yml
+Uses the following tasks:
 
-This playbook backs up all group policy objects in a chosen domain. Currently it is writing to **C:\Windows\Temp** on the host from the inventory.yml file. If used in production, I would have this go to a different backup server on a different host for storage. This checks to ensure that the DC and Group Policy Management Console are installed before proceeding with the backups, and will output any Success or Failures. The idea of this would be to have a staging domain of the policies you manage, that you can then import and link in other domains.
+- task-check-gpo-prerequisites.yml
+- task-check-gpo-exists.yml
 
-### grouppolicy-import.yml
+### playbook-gpo-import.yml
 
-This playbook allows you to import a group policy object into a chosen domain. Currently the base path for the backups is **C:\Windows\Temp** on the host from the inventory.yml file. You are then met with prompts:
-- GPO Name
-- Backup Date (which folder to process from)
-- Backup ID (GUID of the policy to process)
+- Prompted for the following:
+  - Domain Name
+  - GPO Name (name of the new GPO once imported)
+  - Backup Date
+  - Backup GUID (from the **C:\Windows\Temp\GPOBackup\%domain%** folder)
+- Will then check to see if the GPO name already exists. If the GPO exists, will prompt for an overwrite (yes/no), if the GPO doesn't exist, will proceed to import the GPO.
 
-From there the playbook will check to see if the policy already exists. If the policy does exist, the playbook will pause for a yes/no prompt to ensure you want to overwrite the policy. Next, the GPO will be imported, and display results if the policy imported or failed.
+Uses the following tasks:
 
-### grouppolicy-link.yml
+- task-check-gpo-prerequisites.yml
+- task-check-gpo-exists.yml
+- task-import-gpo.yml
 
-With this, a user would choose the domain from the prompt, and enter the GPO name into the console. A check is in place to make sure the GPO exists, and if the GPO exists, will then link it to the organizational units defined in the **ous.yml** file.
+### playbook-gpo-link.yml
 
+- Prompted for the following:
+  - Domain Name
+  - GPO Name
+Will then link a GPO to the OUs defined in the **var-gpo.yml** file
 
+Uses the following tasks:
 
+- task-check-gpo-prerequisites.yml
+- task-check-gpo-exists.yml
+- task-check-and-link-gpo.yml
+
+## playbooks\gpo\files
+
+### ConvertTo-DistinguishedName.ps1
+
+Converts the output given by Get-GPLink into DN format instead of joeloveless.com\JoeLoveless_Workstations\Windows_11.
+
+## playbooks\gpo\vars
+
+### var-gpo.yml
+
+Contains the domain, the fqdn, the backup path, and the defined OUs. Can add new domains, and specify the details for each to allow for flexibility. This allows for different OUs and backup paths to be listed, allowing you to backup to different file shares, or target different OU structures.
+
+## playbooks\gpo\tasks
+
+This contains various pieces of code to avoid duplicating the code across playbooks.
+
+### task-backup-gpo-all.yml
+
+Backs up all GPOs in a given domain to a file share. For POC purposes, this is just going to **C:\Windows\Temp\GPOBackup** on the host. Outputs success and failed backups, and will fail the step if there is any failure.
+
+### task-check-and-link-gpo.yml
+
+A combination task that takes **task-check-gpo-link.yml** and **task-set-gpo-link.yml** and puts it in one task. This allows for better looping of the tasks so output is not overwritten.
+
+### task-check-gpo-exists.yml
+
+Does a **Get-GPO** and outputs the details of the GPO.
+
+### task-check-gpo-prerequisites.yml
+
+Checks to make sure the domain controller is available. Also checks to make sure Group Policy Management Console is installed.
+
+### task-import-gpo.yml
+
+After gathering the results from **task-check-gpo-exists.yml** will then import a GPO into the domain.
+
+### task-set-gpo-link.yml
+
+After gathering the results from **task-check-gpo-link.yml** will then link a GPO to the OUs.
