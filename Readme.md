@@ -38,7 +38,7 @@ Contains a list of organizational units that you can manage. In this case, the p
 
 This playbook backs up all group policy objects in a chosen domain. Currently it is writing to **C:\Windows\Temp** on the host from the inventory.yml file. If used in production, I would have this go to a different backup server on a different host for storage. This checks to ensure that the DC and Group Policy Management Console are installed before proceeding with the backups, and will output any Success or Failures. The idea of this would be to have a staging domain of the policies you manage, that you can then import and link in other domains.
 
-## grouppolicy-import.yml
+### grouppolicy-import.yml
 
 This playbook allows you to import a group policy object into a chosen domain. Currently the base path for the backups is **C:\Windows\Temp** on the host from the inventory.yml file. You are then met with prompts:
 - GPO Name
@@ -47,7 +47,7 @@ This playbook allows you to import a group policy object into a chosen domain. C
 
 From there the playbook will check to see if the policy already exists. If the policy does exist, the playbook will pause for a yes/no prompt to ensure you want to overwrite the policy. Next, the GPO will be imported, and display results if the policy imported or failed.
 
-## grouppolicy-link.yml
+### grouppolicy-link.yml
 
 With this, a user would choose the domain from the prompt, and enter the GPO name into the console. A check is in place to make sure the GPO exists, and if the GPO exists, will then link it to the organizational units defined in the **ous.yml** file.
 
