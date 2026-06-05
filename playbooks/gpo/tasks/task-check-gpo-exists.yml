@@ -1,0 +1,45 @@
+- name: Check if GPO exists
+  ansible.windows.win_powershell:
+    script: |
+      $targetDomain = '{{ targetDomain }}'
+      $gpoName = '{{ gpoName }}'
+      $allGpos = Get-GPO -All -Domain $targetDomain
+      $match = $allGpos | Where-Object { $_.DisplayName -eq $gpoName }
+      if ($match) {
+          Write-Output ([PSCustomObject]@{
+              Exists           = $true
+              DisplayName      = $match.DisplayName
+              DomainName       = $match.DomainName
+              Owner            = $match.Owner
+              Id               = $match.Id
+              GpoStatus        = $match.GpoStatus
+              CreationTime     = $match.CreationTime
+              ModificationTime = $match.ModificationTime
+          })
+      } else {
+          Write-Output ([PSCustomObject]@{
+              Exists      = $false
+              DisplayName = $gpoName
+          })
+      }
+  register: gpoCheck
+  changed_when: false
+
+- name: GPO does not exist
+  ansible.builtin.fail:
+    msg: "GPO '{{ gpoName }}' does not exist in '{{ targetDomain }}'."
+  when:
+    - not (gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool)
+    - gpoMustExist | default(true) | bool
+
+- name: GPO exists
+  ansible.builtin.debug:
+    msg: "GPO '{{ gpoName }}' exists in '{{ targetDomain }}'."
+  when: gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+
+- name: GPO does not exist
+  ansible.builtin.debug:
+    msg: "GPO '{{ gpoName }}' does not exist in '{{ targetDomain }}'. Will be created on import."
+  when:
+    - not (gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool)
+    - not (gpoMustExist | default(true) | bool)

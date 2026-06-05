@@ -1,0 +1,52 @@
+- name: Group Policy - Import
+  hosts: domain_controllers
+  vars_files:
+    - vars/var-gpo.yml
+  vars_prompt:
+    - name: domainSelection
+      prompt: |
+        Select target domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
+      private: false
+    - name: gpoName
+      prompt: What is the name of the GPO to import?
+      private: false
+    - name: backupDate
+      prompt: What is the backup date to restore from? (yyyy-MM-dd-HHMM)
+      private: false
+    - name: backupId
+      prompt: What is the backup ID (GUID) to restore?
+      private: false
+
+  tasks:
+    - name: Set target domain from selection
+      ansible.builtin.set_fact:
+        targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+        backupPath: "{{ domains[domainSelection | int - 1].backupPath }}"
+
+    - name: Check GPO prerequisites
+      ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
+
+    - name: Check if GPO exists
+      ansible.builtin.include_tasks: tasks/task-check-gpo-exists.yml
+      vars:
+        gpoMustExist: false
+
+    - name: Confirm overwrite if GPO exists
+      ansible.builtin.pause:
+        prompt: "GPO '{{ gpoName }}' already exists in domain '{{ targetDomain }}'. Do you want to overwrite it? (yes/no)"
+      register: overwriteConfirm
+      when: gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+
+    - name: Exit if overwrite not confirmed
+      ansible.builtin.fail:
+        msg: "Import aborted. GPO '{{ gpoName }}' already exists and overwrite was not confirmed."
+      when:
+        - gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+        - overwriteConfirm.user_input | lower != 'yes'
+
+    - name: Import GPO
+      ansible.builtin.include_tasks: tasks/task-import-gpo.yml

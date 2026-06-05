@@ -1,0 +1,22 @@
+- name: Reset link needed fact
+  ansible.builtin.set_fact:
+    linkNeeded: false
+
+- name: Pre-link check
+  ansible.builtin.include_tasks: tasks/task-check-gpo-link.yml
+  vars:
+    checkLabel: "Pre-link check"
+
+- name: Set link needed fact
+  ansible.builtin.set_fact:
+    linkNeeded: "{{ not (gpoLinkCheck.output | selectattr('LinkedToTarget', 'defined') | map(attribute='LinkedToTarget') | list | last | bool) }}"
+
+- name: Link GPO to OU
+  ansible.builtin.include_tasks: tasks/task-set-gpo-link.yml
+  when: linkNeeded | bool
+
+- name: Post-link check
+  ansible.builtin.include_tasks: tasks/task-check-gpo-link.yml
+  when: linkNeeded | bool
+  vars:
+    checkLabel: "Post-link check"

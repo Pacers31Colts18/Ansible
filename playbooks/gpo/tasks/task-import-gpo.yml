@@ -1,0 +1,48 @@
+- name: Import GPO
+  ansible.windows.win_powershell:
+    script: |
+      $targetDomain = '{{ targetDomain }}'
+      $gpoName = '{{ gpoName }}'
+      $backupFolder = '{{ backupPath }}' + '\{{ backupDate }}'
+      $gpoExists = '{{ gpoCheck.output | selectattr("Exists", "defined") | map(attribute="Exists") | list | last }}'
+
+      try {
+          if ($gpoExists -eq 'True') {
+              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
+          } else {
+              New-GPO -Name $gpoName -Domain $targetDomain -ErrorAction Stop | Out-Null
+              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
+          }
+          Write-Output ([PSCustomObject]@{
+              ImportSuccess = $true
+              DisplayName   = $gpoName
+              BackupId      = '{{ backupId }}'
+              Domain        = $targetDomain
+          })
+      }
+      catch {
+          Write-Output ([PSCustomObject]@{
+              ImportSuccess = $false
+              DisplayName   = $gpoName
+              Domain        = $targetDomain
+              ImportError   = $_.Exception.Message
+          })
+      }
+  register: importResult
+  when: >
+    not (gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool)
+    or overwriteConfirm.user_input | lower == 'yes'
+
+- name: Import succeeded
+  ansible.builtin.debug:
+    msg: "Successfully imported '{{ gpoName }}' into '{{ targetDomain }}' from backup '{{ backupId }}'"
+  when:
+    - importResult is not skipped
+    - importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool
+
+- name: Import failed
+  ansible.builtin.fail:
+    msg: "Failed to import '{{ gpoName }}' into '{{ targetDomain }}' - Error: {{ (importResult.output | selectattr('ImportError', 'defined') | list | last).ImportError }}"
+  when:
+    - importResult is not skipped
+    - not (importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool)

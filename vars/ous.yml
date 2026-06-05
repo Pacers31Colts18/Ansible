@@ -1,5 +1,0 @@
-ous:
-  - name: "Windows 11 Workstations"
-    dn: "OU=Windows_11,OU=JoeLoveless_Workstations,DC=joeloveless,DC=com"
-  - name: "Windows 10 Workstations"
-    dn: "OU=Windows_10,OU=JoeLoveless_Workstations,DC=joeloveless,DC=com"

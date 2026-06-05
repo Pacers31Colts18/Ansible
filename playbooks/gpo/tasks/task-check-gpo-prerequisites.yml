@@ -1,0 +1,7 @@
+- name: Ensure Domain Controllers are available
+  ansible.windows.win_ping:
+
+- name: Ensure GPMC is available
+  ansible.windows.win_feature:
+    name: GPMC
+    state: present
