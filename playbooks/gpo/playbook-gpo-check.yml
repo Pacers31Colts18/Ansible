@@ -3,7 +3,7 @@
   vars_files:
     - vars/var-gpo.yml
   vars:
-    ansible_winrm_transport: ntlm
+    ansible_winrm_transport: kerberos
   vars_prompt:
     - name: domainSelection
       prompt: |
@@ -14,7 +14,7 @@
         Enter number
       private: false
     - name: ansible_user
-      prompt: "Admin username (e.g. DOMAIN\\administrator)"
+      prompt: "Admin username (e.g. administrator@JOELOVELESS.COM)"
       private: false
     - name: ansible_password
       prompt: "Password"
