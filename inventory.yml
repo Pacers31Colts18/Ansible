@@ -2,10 +2,6 @@
 all:
   children:
     windows:
-      hosts:
-        dc01:
-          ansible_host: dc01.joeloveless.com
-
       vars:
         #WinRM over HTTPS
         ansible_connection: winrm
@@ -23,11 +19,13 @@ all:
         #Ignore Cert, no CA server
         ansible_winrm_server_cert_validation: ignore
 
-    domain_controllers:
-      hosts:
-        dc01:
+      children:
+        domain_controllers:
+          hosts:
+            dc01:
+              ansible_host: dc01.joeloveless.com
 
-    management:
-      hosts:
-        pc0003:
-          ansible_host: PC0003.joeloveless.com
+        management:
+          hosts:
+            pc0003:
+              ansible_host: PC0003.joeloveless.com
