@@ -26,3 +26,8 @@ all:
     domain_controllers:
       hosts:
         dc01:
+
+    management:
+      hosts:
+        pc0003:
+          ansible_host: PC0003.joeloveless.com

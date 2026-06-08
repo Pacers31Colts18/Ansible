@@ -1,5 +1,5 @@
 - name: Group Policy - Check
-  hosts: domain_controllers
+  hosts: management
   vars_files:
     - vars/var-gpo.yml
   vars:
