@@ -1,10 +1,28 @@
 - name: Group Policy - Import
   hosts: group_policy
+  vars_files:
+    - vars/var-gpo.yml
   vars:
-    ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
+    ansible_user: "{{ username_input }}@{{ domains[domainSelection | int - 1].fqdn | upper }}"
   vars_prompt:
+    - name: domainSelection
+      prompt: |
+        Select target domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
+      private: false
+    - name: importSourceSelection
+      prompt: |
+        Select import source:
+        {% for source in importSources %}
+        {{ loop.index }}. {{ source.name }} - {{ source.path }}
+        {% endfor %}
+        Enter number
+      private: false
     - name: username_input
-      prompt: "Admin username"
+      prompt: "Username"
       private: false
     - name: ansible_password
       prompt: "Password"
@@ -20,11 +38,11 @@
       private: false
 
   tasks:
-    - name: Set target domain
+    - name: Set target domain and import source from selection
       ansible.builtin.set_fact:
-        targetDomain: "{{ domains[0].fqdn }}"
-        targetDC: "{{ domains[0].dc }}"
-        backupPath: "{{ domains[0].backupPath }}"
+        targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+        targetDC: "{{ domains[domainSelection | int - 1].dc }}"
+        importPath: "{{ importSources[importSourceSelection | int - 1].path }}"
 
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml

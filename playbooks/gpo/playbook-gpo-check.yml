@@ -1,10 +1,20 @@
 - name: Group Policy - Check
   hosts: group_policy
+  vars_files:
+    - vars/var-gpo.yml
   vars:
-    ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
+    ansible_user: "{{ username_input }}@{{ domains[domainSelection | int - 1].fqdn | upper }}"
   vars_prompt:
+    - name: domainSelection
+      prompt: |
+        Select target domain:
+        {% for domain in domains %}
+        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
+        {% endfor %}
+        Enter number
+      private: false
     - name: username_input
-      prompt: "Admin username"
+      prompt: "Username"
       private: false
     - name: ansible_password
       prompt: "Password"
@@ -14,11 +24,11 @@
       private: false
 
   tasks:
-    - name: Set target domain
+    - name: Set target domain from selection
       ansible.builtin.set_fact:
-        targetDomain: "{{ domains[0].fqdn }}"
-        targetDC: "{{ domains[0].dc }}"
-        
+        targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+        targetDC: "{{ domains[domainSelection | int - 1].dc }}"
+
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
 

@@ -4,7 +4,7 @@
       $targetDomain = '{{ targetDomain }}'
       $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
-      $backupFolder = '{{ backupPath }}' + '\{{ backupDate }}'
+      $backupFolder = '{{ importPath }}' + '\{{ backupDate }}'
       $gpoExists = '{{ gpoCheck.output | selectattr("Exists", "defined") | map(attribute="Exists") | list | last }}'
 
       try {
