@@ -1,0 +1,8 @@
+domains:
+  - name: "Customer Name"
+    fqdn: "customer.com"
+    dc: "dc01.customer.com"
+    backupPath: '\\fileserver\GPOBackups\customer'
+    ous:
+      - name: "OU Name"
+        dn: "OU=OUName,DC=customer,DC=com"

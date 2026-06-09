@@ -1,7 +1,5 @@
 - name: Group Policy - Import
   hosts: group_policy
-  vars_files:
-    - vars/var-gpo.yml
   vars:
     ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
   vars_prompt:

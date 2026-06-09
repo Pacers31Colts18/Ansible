@@ -1,7 +1,7 @@
 - name: Check if GPO is linked to OU
   ansible.windows.win_powershell:
     script: |
-      {{ lookup('file', 'files/ConvertTo-DistinguishedName.ps1') }}
+      {{ lookup('file', playbook_dir + '/files/ConvertTo-DistinguishedName.ps1') }}
 
       $targetDomain = '{{ targetDomain }}'
       $targetDC = '{{ targetDC }}'

@@ -1,7 +1,5 @@
-- name: Group Policy - Link
+- name: Group Policy - Check
   hosts: group_policy
-  vars_files:
-    - vars/var-gpo.yml
   vars:
     ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
   vars_prompt:
@@ -12,7 +10,7 @@
       prompt: "Password"
       private: true
     - name: gpoName
-      prompt: Enter the GPO name
+      prompt: What is the name of the GPO to check?
       private: false
 
   tasks:
@@ -20,18 +18,11 @@
       ansible.builtin.set_fact:
         targetDomain: "{{ domains[0].fqdn }}"
         targetDC: "{{ domains[0].dc }}"
-        backupPath: "{{ domains[0].backupPath }}"
-        ous: "{{ domains[0].ous }}"
-
-# MAIN
+        
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
 
     - name: Check if GPO exists
       ansible.builtin.include_tasks: tasks/task-check-gpo-exists.yml
-
-    - name: Check and link GPO to each OU
-      ansible.builtin.include_tasks: tasks/task-check-and-link-gpo.yml
-      loop: "{{ ous }}"
-      loop_control:
-        label: "{{ item.name }}"
+      vars:
+        gpoMustExist: false

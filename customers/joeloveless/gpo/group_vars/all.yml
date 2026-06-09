@@ -2,7 +2,7 @@ domains:
   - name: "Joe Loveless"
     fqdn: "joeloveless.com"
     dc: "dc01.joeloveless.com"
-    backupPath: 'C:\GPOBackup\'
+    backupPath: '\\gp01.joeloveless.com\GPOBackup\joeloveless.com'
     ous:
       - name: "Windows 11 Workstations"
         dn: "OU=Windows_11,OU=JoeLoveless_Workstations,DC=joeloveless,DC=com"
