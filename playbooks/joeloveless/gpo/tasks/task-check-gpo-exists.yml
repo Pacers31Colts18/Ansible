@@ -2,8 +2,9 @@
   ansible.windows.win_powershell:
     script: |
       $targetDomain = '{{ targetDomain }}'
+      $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
-      $allGpos = Get-GPO -All -Domain $targetDomain
+      $allGpos = Get-GPO -All -Domain $targetDomain -Server $targetDC
       $match = $allGpos | Where-Object { $_.DisplayName -eq $gpoName }
       if ($match) {
           Write-Output ([PSCustomObject]@{

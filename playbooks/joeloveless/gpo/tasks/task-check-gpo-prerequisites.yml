@@ -1,4 +1,4 @@
-- name: Ensure Domain Controllers are available
+- name: Ensure servers are available
   ansible.windows.win_ping:
 
 - name: Ensure GPMC is available

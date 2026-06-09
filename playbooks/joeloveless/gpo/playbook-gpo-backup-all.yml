@@ -1,0 +1,25 @@
+- name: Group Policy - Backup
+  hosts: group_policy
+  vars_files:
+    - vars/var-gpo.yml
+  vars:
+    ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
+  vars_prompt:
+    - name: username_input
+      prompt: "Username"
+      private: false
+    - name: ansible_password
+      prompt: "Password"
+      private: true
+  tasks:
+    - name: Set source domain
+      ansible.builtin.set_fact:
+        sourceDomain: "{{ domains[0].fqdn }}"
+        sourceDC: "{{ domains[0].dc }}"
+        backupPath: "{{ domains[0].backupPath }}"
+
+    - name: Check GPO prerequisites
+      ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
+
+    - name: Backup all GPOs
+      ansible.builtin.include_tasks: tasks/task-backup-gpo-all.yml

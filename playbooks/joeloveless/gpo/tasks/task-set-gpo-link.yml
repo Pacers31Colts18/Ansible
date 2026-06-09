@@ -2,12 +2,13 @@
   ansible.windows.win_powershell:
     script: |
       $targetDomain = '{{ targetDomain }}'
+      $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
       $targetOU = '{{ item.dn }}'
       $ouName = '{{ item.name }}'
 
       Try {
-          New-GPLink -Name $gpoName -Target $targetOU -Domain $targetDomain -ErrorAction Stop
+          New-GPLink -Name $gpoName -Target $targetOU -Domain $targetDomain -Server $targetDC -ErrorAction Stop
           Write-Output ([PSCustomObject]@{
               OUName   = $ouName
               TargetOU = $targetOU

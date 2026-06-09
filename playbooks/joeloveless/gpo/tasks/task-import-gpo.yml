@@ -2,16 +2,17 @@
   ansible.windows.win_powershell:
     script: |
       $targetDomain = '{{ targetDomain }}'
+      $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
       $backupFolder = '{{ backupPath }}' + '\{{ backupDate }}'
       $gpoExists = '{{ gpoCheck.output | selectattr("Exists", "defined") | map(attribute="Exists") | list | last }}'
 
       try {
           if ($gpoExists -eq 'True') {
-              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
+              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
           } else {
-              New-GPO -Name $gpoName -Domain $targetDomain -ErrorAction Stop | Out-Null
-              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Path $backupFolder -ErrorAction Stop
+              New-GPO -Name $gpoName -Domain $targetDomain -Server $targetDC -ErrorAction Stop | Out-Null
+              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
           }
           Write-Output ([PSCustomObject]@{
               ImportSuccess = $true

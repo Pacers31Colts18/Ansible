@@ -1,27 +1,30 @@
 - name: Group Policy - Check
-  hosts: domain_controllers
+  hosts: group_policy
   vars_files:
     - vars/var-gpo.yml
+  vars:
+    ansible_user: "{{ username_input }}@{{ domains[0].fqdn | upper }}"
   vars_prompt:
-    - name: domainSelection
-      prompt: |
-        Select target domain:
-        {% for domain in domains %}
-        {{ loop.index }}. {{ domain.name }} - {{ domain.fqdn }}
-        {% endfor %}
-        Enter number
+    - name: username_input
+      prompt: "Admin username"
       private: false
+    - name: ansible_password
+      prompt: "Password"
+      private: true
     - name: gpoName
       prompt: What is the name of the GPO to check?
       private: false
 
   tasks:
-    - name: Set target domain from selection
+    - name: Set target domain
       ansible.builtin.set_fact:
-        targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
+        targetDomain: "{{ domains[0].fqdn }}"
+        targetDC: "{{ domains[0].dc }}"
         
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
 
     - name: Check if GPO exists
       ansible.builtin.include_tasks: tasks/task-check-gpo-exists.yml
+      vars:
+        gpoMustExist: false

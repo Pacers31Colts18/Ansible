@@ -3,6 +3,7 @@
       ansible.windows.win_powershell:
         script: |
           $sourceDomain = '{{ sourceDomain }}'
+          $sourceDC = '{{ sourceDC }}'
           $backupPath = '{{ backupPath }}'
           $date = Get-Date -Format "yyyy-MM-dd-HHmm"
           $fullPath = $backupPath + '\' + $date
@@ -11,12 +12,12 @@
               New-Item -ItemType Directory -Path $fullPath | Out-Null
           }
 
-          $allGpos = Get-GPO -All -Domain $sourceDomain
+          $allGpos = Get-GPO -All -Domain $sourceDomain -Server $sourceDC
           $results = @()
 
           foreach ($gpo in $allGpos) {
               try {
-                  $backup = Backup-GPO -Name $gpo.DisplayName -Domain $sourceDomain -Path $fullPath -ErrorAction Stop
+                  $backup = Backup-GPO -Name $gpo.DisplayName -Domain $sourceDomain -Server $sourceDC -Path $fullPath -ErrorAction Stop
                   $results += [PSCustomObject]@{
                       DisplayName   = $gpo.DisplayName
                       BackupId      = $backup.Id
