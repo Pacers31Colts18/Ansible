@@ -1,3 +1,5 @@
+# imports a GPO from a file share 
+---
 - name: Group Policy - Import
   hosts: group_policy
   vars_files:
@@ -13,57 +15,78 @@
         {% endfor %}
         Enter number
       private: false
-    - name: importSourceSelection
-      prompt: |
-        Select import source:
-        {% for source in importSources %}
-        {{ loop.index }}. {{ source.name }} - {{ source.path }}
-        {% endfor %}
-        Enter number
-      private: false
     - name: username_input
       prompt: "Username"
       private: false
     - name: ansible_password
       prompt: "Password"
       private: true
-    - name: gpoName
-      prompt: What is the name of the GPO to import?
-      private: false
-    - name: backupDate
-      prompt: What is the backup date to restore from? (yyyy-MM-dd-HHMM)
-      private: false
-    - name: backupId
-      prompt: What is the backup ID (GUID) to restore?
-      private: false
 
   tasks:
-    - name: Set target domain and import source from selection
+    - name: Set target domain from selection
       ansible.builtin.set_fact:
         targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
         targetDC: "{{ domains[domainSelection | int - 1].dc }}"
-        importPath: "{{ importSources[importSourceSelection | int - 1].path }}"
+        customerBackupPath: "{{ domains[domainSelection | int - 1].backupPath }}"
+
+    - name: Select import source
+      ansible.builtin.pause:
+        prompt: |
+          Select import source:
+          1. Shared Import  - {{ sharedImportPath }}
+          2. Customer Import - {{ customerBackupPath }}
+          Enter number
+      register: importSourcePrompt
+
+    - name: Set import path from selection
+      ansible.builtin.set_fact:
+        importPath: "{{ sharedImportPath if importSourcePrompt.user_input == '1' else customerBackupPath }}"
 
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
 
-    - name: Check if GPO exists
+    - name: Select backup date
+      ansible.builtin.include_tasks: tasks/task-select-backup-date.yml
+
+    - name: Select GPO to import
+      ansible.builtin.include_tasks: tasks/task-select-gpo.yml
+
+    - name: Set default target GPO name
+      ansible.builtin.set_fact:
+        targetGpoName: "{{ gpoName }}"
+
+    - name: Check if GPO exists in target domain
       ansible.builtin.include_tasks: tasks/task-check-gpo-exists.yml
       vars:
         gpoMustExist: false
 
-    - name: Confirm overwrite if GPO exists
+    - name: Prompt action if GPO exists
       ansible.builtin.pause:
-        prompt: "GPO '{{ gpoName }}' already exists in domain '{{ targetDomain }}'. Do you want to overwrite it? (yes/no)"
-      register: overwriteConfirm
+        prompt: "GPO '{{ gpoName }}' already exists in '{{ targetDomain }}'. (O)verwrite policy / (N)ew policy / (A)bort"
+      register: overwriteChoice
       when: gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
 
-    - name: Exit if overwrite not confirmed
+    - name: Abort if requested
       ansible.builtin.fail:
-        msg: "Import aborted. GPO '{{ gpoName }}' already exists and overwrite was not confirmed."
+        msg: "Import aborted by user."
       when:
         - gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
-        - overwriteConfirm.user_input | lower != 'yes'
+        - overwriteChoice.user_input | lower in ['a', 'abort']
+
+    - name: Prompt for new GPO name
+      ansible.builtin.pause:
+        prompt: "Enter a new name for the imported GPO"
+      register: newNamePrompt
+      when:
+        - gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+        - overwriteChoice.user_input | lower in ['n', 'new']
+
+    - name: Set new target GPO name
+      ansible.builtin.set_fact:
+        targetGpoName: "{{ newNamePrompt.user_input }}"
+      when:
+        - gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool
+        - overwriteChoice.user_input | lower in ['n', 'new']
 
     - name: Import GPO
       ansible.builtin.include_tasks: tasks/task-import-gpo.yml

@@ -1,0 +1,34 @@
+- name: List available backup dates for GPO
+  ansible.windows.win_powershell:
+    script: |
+      $gpoPath = '{{ importPath }}'
+      $dirs = Get-ChildItem -Path $gpoPath -Directory -ErrorAction Stop |
+              Sort-Object Name -Descending
+      foreach ($dir in $dirs) {
+          Write-Output ([PSCustomObject]@{ Name = $dir.Name })
+      }
+  register: backupDates
+  changed_when: false
+
+- name: Fail if no backup dates found
+  ansible.builtin.fail:
+    msg: "No backup dates found in '{{ importPath }}'"
+  when: backupDates.output | length == 0
+
+- name: Build date selection prompt
+  ansible.builtin.set_fact:
+    datePrompt: |
+      Available backup dates:
+      {% for date in backupDates.output %}
+      {{ loop.index }}. {{ date.Name }}
+      {% endfor %}
+      Enter number
+
+- name: Select backup date
+  ansible.builtin.pause:
+    prompt: "{{ datePrompt }}"
+  register: dateSelection
+
+- name: Set selected backup date
+  ansible.builtin.set_fact:
+    backupDate: "{{ backupDates.output[dateSelection.user_input | int - 1].Name }}"

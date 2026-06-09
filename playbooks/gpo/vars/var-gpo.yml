@@ -9,6 +9,4 @@ domains:
       - name: "Windows 10 Workstations"
         dn: "OU=Windows_10,OU=JoeLoveless_Workstations,DC=joeloveless,DC=com"
 
-importSources:
-  - name: "Joe Loveless"
-    path: '\\gp01.joeloveless.com\GPOBackup\joeloveless.com'
+sharedImportPath: '\\fileserver\GPOBackups\shared'

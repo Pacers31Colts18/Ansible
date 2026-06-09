@@ -1,0 +1,34 @@
+- name: List GPOs in backup date folder
+  ansible.windows.win_powershell:
+    script: |
+      $backupFolder = '{{ importPath }}' + '\{{ backupDate }}'
+      $dirs = Get-ChildItem -Path $backupFolder -Directory -ErrorAction Stop |
+              Sort-Object Name
+      foreach ($dir in $dirs) {
+          Write-Output ([PSCustomObject]@{ Name = $dir.Name })
+      }
+  register: backupGpos
+  changed_when: false
+
+- name: Fail if no GPOs found in backup
+  ansible.builtin.fail:
+    msg: "No GPO folders found under date '{{ backupDate }}' in '{{ importPath }}'"
+  when: backupGpos.output | length == 0
+
+- name: Build GPO selection prompt
+  ansible.builtin.set_fact:
+    gpoPrompt: |
+      Available GPOs in backup '{{ backupDate }}':
+      {% for gpo in backupGpos.output %}
+      {{ loop.index }}. {{ gpo.Name }}
+      {% endfor %}
+      Enter number
+
+- name: Select GPO
+  ansible.builtin.pause:
+    prompt: "{{ gpoPrompt }}"
+  register: gpoSelection
+
+- name: Set selected GPO name
+  ansible.builtin.set_fact:
+    gpoName: "{{ backupGpos.output[gpoSelection.user_input | int - 1].Name }}"

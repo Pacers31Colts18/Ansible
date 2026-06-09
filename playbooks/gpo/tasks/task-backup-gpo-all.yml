@@ -1,59 +1,54 @@
+- name: Backup all GPOs
+  ansible.windows.win_powershell:
+    script: |
+      $sourceDomain = '{{ sourceDomain }}'
+      $sourceDC = '{{ sourceDC }}'
+      $backupPath = '{{ backupPath }}'
+      $date = Get-Date -Format "yyyy-MM-dd-HHmm"
 
-    - name: Backup all GPOs
-      ansible.windows.win_powershell:
-        script: |
-          $sourceDomain = '{{ sourceDomain }}'
-          $sourceDC = '{{ sourceDC }}'
-          $backupPath = '{{ backupPath }}'
-          $date = Get-Date -Format "yyyy-MM-dd-HHmm"
-          $fullPath = $backupPath + '\' + $date
+      $allGpos = Get-GPO -All -Domain $sourceDomain -Server $sourceDC
+      $results = @()
 
-          if (-not (Test-Path $fullPath)) {
-              New-Item -ItemType Directory -Path $fullPath | Out-Null
-          }
-
-          $allGpos = Get-GPO -All -Domain $sourceDomain -Server $sourceDC
-          $results = @()
-
-          foreach ($gpo in $allGpos) {
-              try {
-                  $backup = Backup-GPO -Name $gpo.DisplayName -Domain $sourceDomain -Server $sourceDC -Path $fullPath -ErrorAction Stop
-                  $results += [PSCustomObject]@{
-                      DisplayName   = $gpo.DisplayName
-                      BackupId      = $backup.Id
-                      BackupSuccess = $true
-                      BackupPath    = $fullPath
-                  }
+      foreach ($gpo in $allGpos) {
+          $gpoPath = $backupPath + '\' + $date + '\' + $gpo.DisplayName
+          try {
+              if (-not (Test-Path $gpoPath)) {
+                  New-Item -ItemType Directory -Path $gpoPath | Out-Null
               }
-              catch {
-                  $results += [PSCustomObject]@{
-                      DisplayName   = $gpo.DisplayName
-                      BackupSuccess = $false
-                      BackupError   = $_.Exception.Message
-                  }
+              Backup-GPO -Name $gpo.DisplayName -Domain $sourceDomain -Server $sourceDC -Path $gpoPath -ErrorAction Stop | Out-Null
+              $results += [PSCustomObject]@{
+                  DisplayName   = $gpo.DisplayName
+                  BackupSuccess = $true
+                  BackupPath    = $gpoPath
               }
           }
-
-          foreach ($result in $results) {
-              Write-Output $result
+          catch {
+              $results += [PSCustomObject]@{
+                  DisplayName   = $gpo.DisplayName
+                  BackupSuccess = $false
+                  BackupError   = $_.Exception.Message
+              }
           }
-      register: backupResults
+      }
 
-    - name: Show successful backups
-      ansible.builtin.debug:
-        msg: "Backed up '{{ item.DisplayName }}' | ID: {{ item.BackupId }} | Path: {{ item.BackupPath }}"
-      loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', true) | list }}"
-      loop_control:
-        label: "{{ item.DisplayName }}"
+      foreach ($result in $results) { Write-Output $result }
+  register: backupResults
 
-    - name: Show failed backups
-      ansible.builtin.debug:
-        msg: "Failed to back up '{{ item.DisplayName }}' - Error: {{ item.BackupError }}"
-      loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list }}"
-      loop_control:
-        label: "{{ item.DisplayName }}"
+- name: Show successful backups
+  ansible.builtin.debug:
+    msg: "Backed up '{{ item.DisplayName }}' to {{ item.BackupPath }}"
+  loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.DisplayName }}"
 
-    - name: Fail if any backups failed
-      ansible.builtin.fail:
-        msg: "One or more GPO backups failed. Review the output above."
-      when: backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list | length > 0
+- name: Show failed backups
+  ansible.builtin.debug:
+    msg: "Failed to back up '{{ item.DisplayName }}' - Error: {{ item.BackupError }}"
+  loop: "{{ backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list }}"
+  loop_control:
+    label: "{{ item.DisplayName }}"
+
+- name: Fail if any backups failed
+  ansible.builtin.fail:
+    msg: "One or more GPO backups failed. Review the output above."
+  when: backupResults.output | selectattr('BackupSuccess', 'defined') | selectattr('BackupSuccess', 'equalto', false) | list | length > 0

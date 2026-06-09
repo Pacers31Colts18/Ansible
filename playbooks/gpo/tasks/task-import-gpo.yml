@@ -4,46 +4,49 @@
       $targetDomain = '{{ targetDomain }}'
       $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
-      $backupFolder = '{{ importPath }}' + '\{{ backupDate }}'
-      $gpoExists = '{{ gpoCheck.output | selectattr("Exists", "defined") | map(attribute="Exists") | list | last }}'
+      $targetGpoName = '{{ targetGpoName }}'
+      $backupFolder = '{{ importPath }}' + '\{{ backupDate }}\' + $gpoName
 
       try {
-          if ($gpoExists -eq 'True') {
-              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
+          if ($targetGpoName -eq $gpoName) {
+              $existing = Get-GPO -Name $targetGpoName -Domain $targetDomain -Server $targetDC -ErrorAction SilentlyContinue
+              if ($existing) {
+                  Import-GPO -BackupGpoName $gpoName -TargetName $targetGpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
+              } else {
+                  New-GPO -Name $targetGpoName -Domain $targetDomain -Server $targetDC -ErrorAction Stop | Out-Null
+                  Import-GPO -BackupGpoName $gpoName -TargetName $targetGpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
+              }
           } else {
-              New-GPO -Name $gpoName -Domain $targetDomain -Server $targetDC -ErrorAction Stop | Out-Null
-              Import-GPO -BackupId '{{ backupId }}' -TargetName $gpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
+              New-GPO -Name $targetGpoName -Domain $targetDomain -Server $targetDC -ErrorAction Stop | Out-Null
+              Import-GPO -BackupGpoName $gpoName -TargetName $targetGpoName -Domain $targetDomain -Server $targetDC -Path $backupFolder -ErrorAction Stop
           }
           Write-Output ([PSCustomObject]@{
-              ImportSuccess = $true
-              DisplayName   = $gpoName
-              BackupId      = '{{ backupId }}'
-              Domain        = $targetDomain
+              ImportSuccess  = $true
+              SourceName     = $gpoName
+              TargetName     = $targetGpoName
+              BackupDate     = '{{ backupDate }}'
+              Domain         = $targetDomain
           })
       }
       catch {
           Write-Output ([PSCustomObject]@{
-              ImportSuccess = $false
-              DisplayName   = $gpoName
-              Domain        = $targetDomain
-              ImportError   = $_.Exception.Message
+              ImportSuccess  = $false
+              SourceName     = $gpoName
+              TargetName     = $targetGpoName
+              Domain         = $targetDomain
+              ImportError    = $_.Exception.Message
           })
       }
   register: importResult
-  when: >
-    not (gpoCheck.output | selectattr('Exists', 'defined') | map(attribute='Exists') | list | last | bool)
-    or overwriteConfirm.user_input | lower == 'yes'
 
 - name: Import succeeded
   ansible.builtin.debug:
-    msg: "Successfully imported '{{ gpoName }}' into '{{ targetDomain }}' from backup '{{ backupId }}'"
+    msg: "Successfully imported '{{ gpoName }}' as '{{ targetGpoName }}' into '{{ targetDomain }}' from backup '{{ backupDate }}'"
   when:
-    - importResult is not skipped
     - importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool
 
 - name: Import failed
   ansible.builtin.fail:
-    msg: "Failed to import '{{ gpoName }}' into '{{ targetDomain }}' - Error: {{ (importResult.output | selectattr('ImportError', 'defined') | list | last).ImportError }}"
+    msg: "Failed to import '{{ gpoName }}' as '{{ targetGpoName }}' into '{{ targetDomain }}' - Error: {{ (importResult.output | selectattr('ImportError', 'defined') | list | last).ImportError }}"
   when:
-    - importResult is not skipped
     - not (importResult.output | selectattr('ImportSuccess', 'defined') | map(attribute='ImportSuccess') | list | last | bool)
