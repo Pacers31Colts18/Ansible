@@ -3,6 +3,8 @@ domains:
     fqdn: "joeloveless.com"
     dc: "dc01.joeloveless.com"
     backupPath: '\\gp01.joeloveless.com\GPOBackup\joeloveless.com'
+    group: 'JoeLoveless - GroupPolicyManagement - Workstations'
+    groupPermissions: 'gpoeditdeletemodifysecurity'
     ous:
       - name: "Windows 11 Workstations"
         dn: "OU=Windows_11,OU=JoeLoveless_Workstations,DC=joeloveless,DC=com"

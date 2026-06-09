@@ -1,3 +1,5 @@
+# Backs ups all GPOs in a domain to a file share defined in the var-gpo.yml file.
+---
 - name: Group Policy - Backup
   hosts: group_policy
   vars_files:

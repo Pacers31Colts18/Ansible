@@ -1,3 +1,5 @@
+# Checks to see if a GPO exists in a domain. 
+---
 - name: Group Policy - Check
   hosts: group_policy
   vars_files:

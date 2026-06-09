@@ -1,6 +1,6 @@
-# Links a gpo to a OU or multiple OUs that are defined in the var-gpo.yml file. 
+# Assigns permissions to a GPO based on the permissions and AD group defined in the var-gpo.yml file.
 ---
-- name: Group Policy - Link
+- name: Group Policy - Assign Permissions
   hosts: group_policy
   vars_files:
     - vars/var-gpo.yml
@@ -30,8 +30,8 @@
       ansible.builtin.set_fact:
         targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
         targetDC: "{{ domains[domainSelection | int - 1].dc }}"
-        backupPath: "{{ domains[domainSelection | int - 1].backupPath }}"
-        ous: "{{ domains[domainSelection | int - 1].ous }}"
+        group: "{{ domains[domainSelection | int - 1].group }}"
+        groupPermissions: "{{ domains[domainSelection | int - 1].groupPermissions }}"
 
     - name: Check GPO prerequisites
       ansible.builtin.include_tasks: tasks/task-check-gpo-prerequisites.yml
@@ -39,8 +39,5 @@
     - name: Check if GPO exists
       ansible.builtin.include_tasks: tasks/task-check-gpo-exists.yml
 
-    - name: Check and link GPO to each OU
-      ansible.builtin.include_tasks: tasks/task-check-and-link-gpo.yml
-      loop: "{{ ous }}"
-      loop_control:
-        label: "{{ item.name }}"
+    - name: Check and set GPO permissions
+      ansible.builtin.include_tasks: tasks/task-check-and-set-gpo-permissions.yml

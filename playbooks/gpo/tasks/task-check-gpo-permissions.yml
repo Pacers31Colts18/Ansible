@@ -1,0 +1,48 @@
+- name: Check GPO permissions
+  ansible.windows.win_powershell:
+    script: |
+      $targetDomain = '{{ targetDomain }}'
+      $targetDC = '{{ targetDC }}'
+      $gpoName = '{{ gpoName }}'
+      $group = '{{ group }}'
+
+      try {
+          $perm = Get-GPPermission -Name $gpoName -TargetName $group -TargetType Group `
+                      -Domain $targetDomain -Server $targetDC -ErrorAction SilentlyContinue
+          if ($perm) {
+              Write-Output ([PSCustomObject]@{
+                  GPOName         = $gpoName
+                  Group           = $group
+                  HasPermission   = $true
+                  PermissionLevel = $perm.Permission.ToString()
+              })
+          } else {
+              Write-Output ([PSCustomObject]@{
+                  GPOName         = $gpoName
+                  Group           = $group
+                  HasPermission   = $false
+                  PermissionLevel = $null
+              })
+          }
+      }
+      catch {
+          Write-Output ([PSCustomObject]@{
+              GPOName         = $gpoName
+              Group           = $group
+              HasPermission   = $false
+              PermissionLevel = $null
+              CheckError      = $_.Exception.Message
+          })
+      }
+  register: gpoPermCheck
+  changed_when: false
+
+- name: Group has permission
+  ansible.builtin.debug:
+    msg: "Group '{{ group }}' has '{{ (gpoPermCheck.output | selectattr('PermissionLevel', 'defined') | list | last).PermissionLevel }}' on GPO '{{ gpoName }}'."
+  when: gpoPermCheck.output | selectattr('HasPermission', 'defined') | map(attribute='HasPermission') | list | last | bool
+
+- name: Group does not have permission
+  ansible.builtin.debug:
+    msg: "Group '{{ group }}' does not have permissions on GPO '{{ gpoName }}'."
+  when: not (gpoPermCheck.output | selectattr('HasPermission', 'defined') | map(attribute='HasPermission') | list | last | bool)
