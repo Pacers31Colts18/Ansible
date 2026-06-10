@@ -28,6 +28,8 @@
         targetDomain: "{{ domains[domainSelection | int - 1].fqdn }}"
         targetDC: "{{ domains[domainSelection | int - 1].dc }}"
         customerBackupPath: "{{ domains[domainSelection | int - 1].backupPath }}"
+        group: "{{ domains[domainSelection | int - 1].group }}"
+        groupPermissions: "{{ domains[domainSelection | int - 1].groupPermissions }}"
 
     - name: Select import source
       ansible.builtin.pause:
@@ -90,3 +92,8 @@
 
     - name: Import GPO
       ansible.builtin.include_tasks: tasks/task-import-gpo.yml
+
+    - name: Assign GPO permissions
+      ansible.builtin.include_tasks: tasks/task-check-and-set-gpo-permissions.yml
+      vars:
+        gpoName: "{{ targetGpoName }}"

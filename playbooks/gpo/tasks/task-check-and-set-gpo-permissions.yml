@@ -5,39 +5,39 @@
       $targetDC = '{{ targetDC }}'
       $gpoName = '{{ gpoName }}'
       $group = '{{ group }}'
-      $groupPermissions = '{{ groupPermissions }}'
+      $level = '{{ groupPermissions }}'
 
       try {
           $perm = Get-GPPermission -Name $gpoName -TargetName $group -TargetType Group `
                       -Domain $targetDomain -Server $targetDC -ErrorAction SilentlyContinue
           if ($perm) {
               Write-Output ([PSCustomObject]@{
-                  GPOName         = $gpoName
-                  Group           = $group
-                  PermissionSet   = $false
+                  GPOName        = $gpoName
+                  Group          = $group
+                  PermissionSet  = $false
                   PermissionLevel = $perm.Permission.ToString()
-                  AlreadyGranted  = $true
+                  AlreadyGranted = $true
               })
           } else {
               Set-GPPermission -Name $gpoName -TargetName $group -TargetType Group `
-                  -PermissionLevel $groupPermissions -Domain $targetDomain -Server $targetDC -ErrorAction Stop
+                  -PermissionLevel $level -Domain $targetDomain -Server $targetDC -ErrorAction Stop
               Write-Output ([PSCustomObject]@{
-                  GPOName         = $gpoName
-                  Group           = $group
-                  PermissionSet   = $true
-                  PermissionLevel = $groupPermissions
-                  AlreadyGranted  = $false
+                  GPOName        = $gpoName
+                  Group          = $group
+                  PermissionSet  = $true
+                  PermissionLevel = $level
+                  AlreadyGranted = $false
               })
           }
       }
       catch {
           Write-Output ([PSCustomObject]@{
-              GPOName         = $gpoName
-              Group           = $group
-              PermissionSet   = $false
+              GPOName        = $gpoName
+              Group          = $group
+              PermissionSet  = $false
               PermissionLevel = $null
-              AlreadyGranted  = $false
-              SetError        = $_.Exception.Message
+              AlreadyGranted = $false
+              SetError       = $_.Exception.Message
           })
       }
   register: gpoPermResult
